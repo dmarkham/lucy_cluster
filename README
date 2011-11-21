@@ -25,14 +25,13 @@ them with the other 2 nodes..
 
 \bin\
   cluster_server.pl (1 per server) 
-    This guy spawns cluster_node.
+    This guy spawns cluster_search_node and cluster_write_node.
 
-  cluster_node.pl  (~1 per-core)
-    This guy is our async muti-searcher it spawns and controls cluster_writer and 
-    cluster_searcher.
+  cluster_write_node.pl (N per cluster_node)
+    This guy does blocking writes into indexes at the cluster_servers request.
   
-  cluster_writer.pl (N per cluster_node)
-    This guy does blocking writes into indexes at the cluster_nodes request.
+  cluster_search_node.pl  (~1 per-core)
+    This guy is our async muti-searcher it spawns and controls cluster_searcher.
   
   cluster_searcher.pl (N per cluster_node)
     This guy does blocking searches on the indexes at the cluster_nodes request
