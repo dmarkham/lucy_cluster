@@ -1,4 +1,4 @@
-This is a unsupported rapid prototype of a clustered system build with Lucy
+This is a unsupported rapid prototype of a clustered system built with Lucy
 
 
 The system should work by distributing a Lucy index on many nodes. 
