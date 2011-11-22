@@ -1,25 +1,62 @@
-This is a unsupported rapid prototype of a clustered system built with Lucy
+This is a unsupported prototype of a clustered system built with Lucy
 
 
 The system should work by distributing a Lucy index on many nodes. 
-The main difference between differences in the interface a user will see
-is.
+The main differences in the interface a user will see is.
 
-1. the enforcement of a primary_key in the schema.
-2. you can't use delete_by_query so deletes need to be 
+1. The enforcement of a primary_key in the schema.
+2. You can't use delete_by_query so deletes need to be 
    done with the primary_key
-3. must know how to reach 1+ cluster_server.
+3. Must know how to reach 1+ cluster_server.
 
 
 
 The Basic Idea.
 
-Create N virtual shards (Standard Lucy Indexes). Distribute them over Y nodes (physical servers).
+Search:
 
+Create N virtual shards (Standard Lucy Indexes). Distribute them over Y nodes (physical servers).
 So lets say N=30, Y=3. We would place 10 shards on each of the 3 boxes. Then performer Local 
-muti-searches on the 10 indexes (async) sending the results for all 10 shards back as a single result 
-for each of the 3 nodes (async). I'm looking to see how fast i can do the 10 local searches and sync 
+multi-searches on the 10 indexes (async) sending the results for all 10 shards back as a single result 
+for each of the 3 nodes (async). I'm looking to see how fast I can do the 10 local searches and sync 
 them with the other 2 nodes.. 
+
+Index:
+
+I want the person that does a write to have the ability to see his write on the next search. *If* he
+waits for the write to finish then should see it on the next search. One way I can think of to do this
+is read sessions. In a system where we are using style (A) replication, users doing searchers could
+hint to the query system the last time *they* made a change. Letting the system pick shards that are 
+new enough to properly service the request. In a style (B) read sessions would be tied to the shards
+that user wrote forcing them to return there until other shards have time to catch up.
+Giving the system a perception of Real Time Search (you change it you see it).
+
+
+
+Replication:
+
+  Oh replication... This is tricky.. 
+  We have to deal with stored and non-stored fields, primary_keys or shard_keys, and maybe doc versions!
+  This leaves us with only a few good options I think.
+
+  A. Replicate the index files on disk to another server. 
+    (http://wiki.apache.org/solr/SolrReplication)
+    On updates/additions you still end up paying the primary_key cost on the master's write.
+
+  B. Replicate indexing sessions with doc versions
+    Lets define a indexing session as the log of all 
+    actions a user took from the time they "opened" the index till the time they called commit.
+    You bundle each doc with with a version (hi-res timestamps).
+    Any doc found in the index thats newer than the doc in the session is ignored.
+    This should let us run the indexing sessions out of order and make multi-master a option.
+
+    The largest issue with this style of replication is write performance. 
+    Enforcing primary_key + version checking on every doc per node 
+    (each node does the same work)..
+
+  C. Replicate indexing sessions without doc versions 
+    Pretty much the same as above but the sessions must be played in order.
+    We still end up paying the primary_key cost but don't have to use versions
 
 
 
@@ -31,9 +68,11 @@ them with the other 2 nodes..
     This guy does blocking writes into indexes at the cluster_servers request.
   
   cluster_search_node.pl  (~1 per-core)
-    This guy is our async muti-searcher it spawns and controls cluster_searcher.
+    This guy is our async multi-searcher it spawns and controls cluster_searcher.
   
   cluster_searcher.pl (N per cluster_node)
     This guy does blocking searches on the indexes at the cluster_nodes request
-    (the index being muti-searched)
+    (the index being multi-searched)
+
+
 
