@@ -25,9 +25,9 @@ Index:
 
 I want the person that does a write to have the ability to see his write on the next search. *If* he
 waits for the write to finish then should see it on the next search. One way I can think of to do this
-is read sessions. In a system where we are using style (A) replication, users doing searchers could
+is "search sessions". In a system where we are using style (A) replication, users doing searchers could
 hint to the query system the last time *they* made a change. Letting the system pick shards that are 
-new enough to properly service the request. In a style (B) read sessions would be tied to the shards
+new enough to properly service the request. In a style (B) search sessions would be tied to the shards
 that user wrote forcing them to return there until other shards have time to catch up.
 Giving the system a perception of Real Time Search (you change it you see it).
 
