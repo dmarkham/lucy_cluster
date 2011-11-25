@@ -1,10 +1,12 @@
 use strict;
 use warnings;
 use Lucy;
+use Getopt::Long;
 use Data::MessagePack;
 use ZeroMQ::Raw;
-use Getopt::Long;
 use ZeroMQ::Constants qw/:all/;
+use AnyEvent;
+
 use Data::Dumper;
 
 print ZeroMQ::version() . "\n";
@@ -48,21 +50,17 @@ $rv   = zmq_connect( $requester, 'tcp://' . $my_node_hostport );
 
 send_data($requester,{control_hostport =>$my_hostport});
 
-zmq_poll([
-        {
-            socket => $requester,
-            events => ZMQ_POLLIN,
-            callback => sub {
-                      print "HERE\n";
-                      while ( my $msg = zmq_recv( $requester, ZMQ_RCVMORE) ) {
-                        my $string  = zmq_msg_data($msg);
-                        print "GOT:$string\n";
-                      }
-                  }, 
-        },
-    ], 0 );
-sleep 5;
+    my $requester_fh = zmq_getsockopt( $requester, ZMQ_FD );
+    my $w; $w = AE::io $requester_fh, 1, sub {
+        while ( my $msg = zmq_recv( $requester, ZMQ_RCVMORE ) ) {
+          my $string  = zmq_msg_data($msg);
+          print "GOT:$string\n";
+          send_data($requester,{control_hostport =>$my_hostport });
+        }
+    };
 
+my $cv = AE::cv;
+$cv->recv;
 
 zmq_close($requester);
 zmq_close($control);
