@@ -14,8 +14,17 @@ print ZeroMQ::version() . "\n";
 ##  This Script is a Dumb generic Searcher it can search any index
 ##  in the index_dir you tell this script who to connect up to
 ##  and it's a blocking question/response  handshake
-## we set up 2 channels to the node.
-## one for queries. The other for control/heartbeat  
+##  we set up 2 channels to the node.
+##  one for queries. The other for control/heartbeat  
+
+## flow should look like this
+## ping  node (it's boss) with a heartbeat
+## node connects up to the control port
+## Ask the searcher about it's local indexes
+## searcher tells the node about what he has
+## node starts sending querys to this searcher (that he can help on)
+##
+
 
 
 my $debug = 0;
@@ -50,14 +59,16 @@ $rv   = zmq_connect( $requester, 'tcp://' . $my_node_hostport );
 
 send_data($requester,{control_hostport =>$my_hostport});
 
-    my $requester_fh = zmq_getsockopt( $requester, ZMQ_FD );
-    my $w; $w = AE::io $requester_fh, 1, sub {
+my $requester_fh = zmq_getsockopt( $requester, ZMQ_FD );
+my $w; $w = AE::io $requester_fh, 1, sub {
         while ( my $msg = zmq_recv( $requester, ZMQ_RCVMORE ) ) {
           my $string  = zmq_msg_data($msg);
           print "GOT:$string\n";
           send_data($requester,{control_hostport =>$my_hostport });
         }
     };
+
+
 
 my $cv = AE::cv;
 $cv->recv;
