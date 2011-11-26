@@ -50,7 +50,10 @@ my $rand_id = int(rand(1_000_000));
 
 while(1){
 
-  print "Checking Heartbeat on $my_node_hostport\n";
+  print "Checking Heartbeat on $my_node_hostport\n" if $debug;
+  
+  ## every 5 seconds or so this guys will try to 
+  ## reconnect with the node and get back in sync
   if(time - $global_state{last_seen_node} > 20){
     print "Sent Hello to node\n" if $debug;
     $global_state{last_seen_node} = time;
@@ -59,7 +62,8 @@ while(1){
     zmq_connect( $requester, 'tcp://' . $my_node_hostport );
     send_data($requester,{_action => 'hello'});
   }
-
+  
+  ## poll the nodes requests
   zmq_poll([
             {
               socket => $requester,
@@ -95,7 +99,7 @@ sub dispatch{
 
   my $data;
   eval{ $data = $mp->unpack($arg); };
-  return {status => 'error'} unless $data;
+  return {status => "error missing data unpack fail? ($@)"} unless $data;
   print "Recived: " . Dumper($data) if $debug;
   my $method = delete $data->{_action};
 
@@ -105,14 +109,36 @@ sub dispatch{
     ## know what index/shards i have
     my $utf_text = "";
     eval{$utf_text= read_file( "$index_dir/index_list.json", binmode => ':utf8' )} ;
+    return {status => "error issue with index_list,json ($@)"} unless $utf_tex;
     return {index_status => $utf_text };
   }
   
-  my $searcher = Lucy::Search::IndexSearcher->new( index => '/path/to/index' );
+  my $index = delete $data->{_index};
+  return {status => 'error missing _index'} unless $index;
+  
+  $index = "$index_dir/$index"; 
+  my $searcher;
+  if($global_state{searchers}{$index}){
+    ## check for need to repopen
+    $searcher = $global_state{searchers}{$index}{searcher};
+  }
+  else{
+    eval{ $searcher = Lucy::Search::IndexSearcher->new( index => $index )};
+    return {status => "error creating Searcher ($@)"} unless $searcher;
+    
+    $global_state{searchers}{$index}{searcher} = $searcher;
+    $global_state{searchers}{$index}{created} = time;
+  }
   
   if($allowed_lucy_methods{$method}){
-    my $response   = $searcher->$method();
-    my $frozen     = nfreeze($response);
+    my $response;
+    my $frozen;
+    eval{
+      $response = $searcher->$method(%{$data->{lucy_args}});
+      $frozen     = nfreeze($response);
+    };
+    return {status => "error search or nfreeeze failed ($@)"} unless $frozen;
+    return {$method => $frozen};
   } 
   
 }
