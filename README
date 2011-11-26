@@ -68,7 +68,7 @@ Replication:
     This guy does blocking writes into indexes at the cluster_servers request.
   
   cluster_search_node.pl  (~1 per-core)
-    This guy is our async multi-searcher it spawns and controls cluster_searcher.
+    This guy is our async multi-searcher using cluster_searchers.
   
   cluster_searcher.pl (N per cluster_node)
     This guy does blocking searches on the indexes at the cluster_nodes request
