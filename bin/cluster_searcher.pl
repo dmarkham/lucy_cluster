@@ -6,21 +6,14 @@ use Data::MessagePack;
 use ZeroMQ::Raw;
 use ZeroMQ::Constants qw/:all/;
 use AnyEvent;
-
 use Data::Dumper;
-
-print ZeroMQ::version() . "\n";
 
 ##  This Script is a Dumb generic Searcher it can search any index
 ##  in the index_dir you tell this script who to connect up to
 ##  and it's a blocking question/response  handshake
-##  we set up 2 channels to the node.
-##  one for queries. The other for control/heartbeat  
 
 ## flow should look like this
 ## ping  node (it's boss) with a heartbeat
-## node connects up to the control port
-## Ask the searcher about it's local indexes
 ## searcher tells the node about what he has
 ## node starts sending querys to this searcher (that he can help on)
 ##
@@ -31,52 +24,95 @@ my $debug = 0;
 
 ## This is who I will be getting my work from 
 my $my_node_hostport = "127.0.0.1:9905";
-my $my_hostport = "127.0.0.1:9600";
 my $mp = Data::MessagePack->new();
 
+
+## place where 1 or more Lucy indexes live
 my $index_dir = "/tmp/indexes/";
 
 
 &GetOptions(
    'debug' => \$debug, 
    'node_hostport' => \$my_node_hostport, 
-   'my_hostport' => \$my_hostport, 
    'index_dir' => \$index_dir, 
 );
 
-print "$my_hostport\t$my_node_hostport\t$debug\n";
 
-
+## our connection to the Node
 my $context   = zmq_init();
 my $requester = zmq_socket( $context, ZMQ_REQ);
-my $control  = zmq_socket( $context, ZMQ_REP);
+my $rv   = zmq_connect( $requester, 'tcp://' . $my_node_hostport );
 
-## we listen for commands on this port
-my $rv   = zmq_bind( $control, 'tcp://' . $my_hostport );
 
-## we send a hello and then wait for  querys
-$rv   = zmq_connect( $requester, 'tcp://' . $my_node_hostport );
+## i can only do 1 query at a time.
+## but if the server doesnt finish a query 
+## i'll need a flag and a way to clean up.
+## this will also help me cordinate a reopen
+## while not being in then middle of a search
 
-send_data($requester,{control_hostport =>$my_hostport});
+my %global_state;
+
+
 
 my $requester_fh = zmq_getsockopt( $requester, ZMQ_FD );
 my $w; $w = AE::io $requester_fh, 1, sub {
         while ( my $msg = zmq_recv( $requester, ZMQ_RCVMORE ) ) {
-          my $string  = zmq_msg_data($msg);
-          print "GOT:$string\n";
-          send_data($requester,{control_hostport =>$my_hostport });
+          my $data  = zmq_msg_data($msg);
+          my $resp = dispatch($data);
+          send_data($requester, $resp);
         }
     };
 
 
 
-my $cv = AE::cv;
-$cv->recv;
+## this kicks off eveything i have to ping the node first!
+## after i say hello he will ask me to do work for him
+## after he figuers out what skills and data i have
+send_data($requester,{_action => 'hello'});
+
+AnyEvent->condvar->recv;
 
 zmq_close($requester);
-zmq_close($control);
 
-print "Here\n";
+exit;
+
+
+## do the work after getting a message
+sub dispatch{
+  my $arg = shift;
+  
+  my %allowed_lucy_methods = (
+    doc_max       => \&do_doc_max,
+    doc_freq      => \&do_doc_freq,
+    top_docs      => \&do_top_docs,
+    fetch_doc     => \&do_fetch_doc,
+    fetch_doc_vec => \&do_fetch_doc_vec,
+  );
+
+
+  my $data;
+  #eval{ $data = $mp->unpack($arg); };
+  return {status => 'error'} unless $data;
+  my $method = delete $data->{_action};
+
+    
+  #my $searcher = Lucy::Search::IndexSearcher->new( 
+  #    index => '/path/to/index' 
+  #);
+
+
+
+  
+  if($allowed_lucy_methods{$method}){
+    my $response   = $allowed_lucy_methods{$method}->(   );
+    #my $frozen     = nfreeze($response);
+  } 
+
+ 
+
+
+  
+}
 
 sub send_data{
   my($socket,$data)  = @_;
@@ -87,9 +123,4 @@ sub send_data{
     
   return $rv;
 }
-
-
-
-
-
 
