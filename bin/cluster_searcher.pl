@@ -84,7 +84,6 @@ zmq_close($requester);
 
 exit;
 
-
 ## do the work after getting a message
 sub dispatch{
   my $arg = shift;
@@ -109,7 +108,7 @@ sub dispatch{
     ## know what index/shards i have
     my $utf_text = "";
     eval{$utf_text= read_file( "$index_dir/index_list.json", binmode => ':utf8' )} ;
-    return {status => "error issue with index_list,json ($@)"} unless $utf_tex;
+    return {status => "error issue with index_list,json ($@)"} unless $utf_text;
     return {index_status => $utf_text };
   }
   
