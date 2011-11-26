@@ -1,9 +1,12 @@
 use strict;
 
-
-
+use Data::MessagePack;
 use ZeroMQ::Constants qw/:all/;
 use ZeroMQ::Raw;
+
+my $mp = Data::MessagePack->new();
+
+
 my $context = ZeroMQ::Context->new();
 my $context = zmq_init(1);
 
@@ -25,10 +28,8 @@ while($got_data) {
 
     print "Received request: [$string]\n";
     sleep 5;
-    my $msg  = zmq_msg_init_data( 'thank you');
-    zmq_send( $requester, $msg );
+    send_data($requester,{_action => 'index_status'});
     print "Sent Reply\n"; 
-    #send_data($requester,'thank you');
 
 }
 zmq_close($requester);
@@ -37,7 +38,7 @@ zmq_term($context);
 sub send_data{
   my($socket,$data)  = @_;
   my $rv = eval {
-      my $msg  = zmq_msg_init_data( $data);
+      my $msg  = zmq_msg_init_data( $mp->pack($data) );
       return  zmq_send( $requester, $msg );
     };
     print "ERROR:$@\n";
