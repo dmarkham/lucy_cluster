@@ -18,9 +18,6 @@ sub new {
 package main;
 
 
-
-
-
 use Lucy;
 use ClusterNode;
 use Data::Dumper;
@@ -28,6 +25,7 @@ use Data::Dumper;
 my $schema  = MySchema->new;
 
 
-my $cn = ClusterNode->new(index_name => "test");
+my $cn = ClusterNode->new(schema => $schema, index_name => "test", hostport => '127.0.0.1:9905');
+
 my $hits = $cn->hits( query => "a" );
 

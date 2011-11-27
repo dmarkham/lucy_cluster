@@ -54,11 +54,12 @@ while(1){
   
   ## every 5 seconds or so this guys will try to 
   ## reconnect with the node and get back in sync
-  if(time - $global_state{last_seen_node} > 20){
+  if(time - $global_state{last_seen_node} > 0){
     print "Sent Hello to node\n" if $debug;
     $global_state{last_seen_node} = time;
     zmq_close($requester) if $requester;
     $requester = zmq_socket( $context, ZMQ_REQ);
+    my $rv   = zmq_setsockopt( $requester, ZMQ_LINGER, 0);
     zmq_connect( $requester, 'tcp://' . $my_node_hostport );
     send_data($requester,{_action => 'hello'});
   }
@@ -77,7 +78,8 @@ while(1){
                 }
               },
             } 
-        ], 5_000_000);
+        ], 50_000);
+        #], 5_000_000);
 }
 
 zmq_close($requester);
@@ -133,11 +135,12 @@ sub dispatch{
     my $response;
     my $frozen;
     eval{
-      $response = $searcher->$method(%{$data->{lucy_args}});
+      my $args = thaw($data->{lucy_args});
+      $response = $searcher->$method(%$args);
       $frozen     = nfreeze($response);
     };
     return {status => "error search or nfreeeze failed ($@)"} unless $frozen;
-    return {$method => $frozen};
+    return {response => $frozen};
   } 
   
 }

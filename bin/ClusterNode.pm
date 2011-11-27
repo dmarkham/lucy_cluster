@@ -23,6 +23,8 @@ use Storable qw( nfreeze thaw );
 use Data::MessagePack;
 use ZeroMQ::Constants qw/:all/;
 use ZeroMQ::Raw;
+use Data::Dumper;
+
 
 my $mp = Data::MessagePack->new();
 my $context = zmq_init(1);
@@ -36,7 +38,7 @@ sub new {
     
     my $index = delete $args{index_name};
     return unless $index;
-    my $hostport = delete $args{node_hostport};
+    my $hostport = delete $args{hostport};
     $hostport = "127.0.0.1:9905" unless $hostport; 
     
     my $self  = $either->SUPER::new(%args);
@@ -60,13 +62,35 @@ sub DESTROY {
 
 
 sub _rpc {
-  my ( $self, $args ) = @_;
-  $args->{_index} = $global_state{$$self}->{index};
+  my ( $self, $lucy_args ) = @_;
   
+
+  my %args;
+  $args{_index} = $global_state{$$self}->{index};
+  $args{_uuid} = $$;
+  $args{_action} = delete $lucy_args->{_action};
+  $lucy_args = nfreeze($lucy_args);
+  $args{lucy_args} = $lucy_args;
+
   ## some smart logic to send querys to 1 copy of each shard 
   ##
-  my $frozen     = nfreeze($args);
-  send_data($global_state{$$self}->{socket},$frozen);
+  print Dumper(\%args);
+  send_data($global_state{$$self}->{socket},\%args);
+  zmq_poll([
+            {
+              socket => $global_state{$$self}->{socket},
+              events => ZMQ_POLLIN,
+              callback => sub {
+                while ( my $msg = zmq_recv( $global_state{$$self}->{socket}, ZMQ_RCVMORE ) ) {
+                  my $data = $mp->unpack(zmq_msg_data($msg));
+                  print Dumper($data);
+                }
+              },
+            } 
+        ], 15_000_000);
+
+  
+
 }
 
 sub top_docs {
@@ -92,7 +116,6 @@ sub fetch_doc_vec {
 sub doc_max {
     my $self = shift;
     my %args = ( _action => 'doc_max' );
-    print Dumper(\%args);
     return $self->_rpc( \%args );
 }
 
@@ -104,7 +127,6 @@ sub doc_freq {
 
 sub send_data{
   my($socket,$data)  = @_; 
-  $data->{_uuid} = $$;
   return  eval {
       my $msg  = zmq_msg_init_data( $mp->pack($data) );
       return  zmq_send( $socket, $msg );
