@@ -54,11 +54,12 @@ while(1){
   
   ## every 5 seconds or so this guys will try to 
   ## reconnect with the node and get back in sync
-  if(time - $global_state{last_seen_node} > 20){
+  if(time - $global_state{last_seen_node} > 0){
     print "Sent Hello to node\n" if $debug;
     $global_state{last_seen_node} = time;
     zmq_close($requester) if $requester;
     $requester = zmq_socket( $context, ZMQ_REQ);
+    my $rv   = zmq_setsockopt( $requester, ZMQ_LINGER, 0);
     zmq_connect( $requester, 'tcp://' . $my_node_hostport );
     send_data($requester,{_action => 'hello'});
   }
@@ -77,13 +78,13 @@ while(1){
                 }
               },
             } 
-        ], 5_000_000);
+        ], 50_000);
+        #], 5_000_000);
 }
 
 zmq_close($requester);
 
 exit;
-
 
 ## do the work after getting a message
 sub dispatch{
@@ -95,6 +96,7 @@ sub dispatch{
     top_docs      => 1,
     fetch_doc     => 1,
     fetch_doc_vec => 1,
+    get_schema    => 1,
   );
 
   my $data;
@@ -109,7 +111,7 @@ sub dispatch{
     ## know what index/shards i have
     my $utf_text = "";
     eval{$utf_text= read_file( "$index_dir/index_list.json", binmode => ':utf8' )} ;
-    return {status => "error issue with index_list,json ($@)"} unless $utf_tex;
+    return {status => "error issue with index_list,json ($@)"} unless $utf_text;
     return {index_status => $utf_text };
   }
   
@@ -134,11 +136,15 @@ sub dispatch{
     my $response;
     my $frozen;
     eval{
-      $response = $searcher->$method(%{$data->{lucy_args}});
+      my $args = thaw($data->{lucy_args});
+      $response = $searcher->$method(%$args);
+      if($method eq 'get_schema'){
+        $response = $response->dump(); 
+      }
       $frozen     = nfreeze($response);
     };
     return {status => "error search or nfreeeze failed ($@)"} unless $frozen;
-    return {$method => $frozen};
+    return {response => $frozen};
   } 
   
 }
