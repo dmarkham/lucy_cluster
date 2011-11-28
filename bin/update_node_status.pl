@@ -6,6 +6,13 @@ use File::Slurp;
 use Data::MessagePack;
 my $mp = Data::MessagePack->new();
 
+
+## This scripts job is to let the Node server 
+## know what indexes the searcher can use and thier schema's.
+## if make include some version info or other meta data
+## in the future but for now just the schema.
+
+
 ## place where 1 or more Lucy indexes live
 my $index_dir = "/tmp/indexes/";
 
