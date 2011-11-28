@@ -62,11 +62,11 @@ Replication:
 
 \bin\
   cluster_server.pl (1 per server) 
-    This guy spawns cluster_search_node and cluster_write_node.
+    This is the users door into the system. Hands out schema's, Maintains a list of 
+    nodes/shards and other cluster_servers? 
 
   cluster_write_node.pl (N per cluster_node)
-    This guy does blocking writes into indexes at the cluster_servers request.
-  
+    
   cluster_search_node.pl  (~1 per-core)
     This guy is our async multi-searcher using cluster_searchers.
   

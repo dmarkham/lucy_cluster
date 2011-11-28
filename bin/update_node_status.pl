@@ -34,6 +34,7 @@ foreach my $dir (@dirs){
     my $searcher = Lucy::Search::IndexSearcher->new( index => "$index_dir/$dir/" );
     my $s = $searcher->get_schema();
     my $dump = $s->dump();
+    print "Adding:$dir\n" if $debug;
     $indexes{$dir} =  { schema => $dump}; 
   };
   print  "Issue with $dir: $@\n" if $@;

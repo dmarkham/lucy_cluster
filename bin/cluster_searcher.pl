@@ -54,7 +54,7 @@ while(1){
   
   ## every 5 seconds or so this guys will try to 
   ## reconnect with the node and get back in sync
-  if(time - $global_state{last_seen_node} > 0){
+  if(time - $global_state{last_seen_node} > 10){
     print "Sent Hello to node\n" if $debug;
     $global_state{last_seen_node} = time;
     zmq_close($requester) if $requester;
@@ -78,8 +78,7 @@ while(1){
                 }
               },
             } 
-        ], 50_000);
-        #], 5_000_000);
+        ], 500_000);
 }
 
 zmq_close($requester);

@@ -13,15 +13,16 @@ $schema->spec_field( name => 'title',   type => $type );
 $schema->spec_field( name => 'body', type => $type );
 
 
-my @shards =  (1,2,3,4,5,6,7,8,9,10);
+my @shards =  (1,2,3,4,6,10,30);
 
 
 
 foreach my $shard_count (@shards){
   my %indexes;  
   for (my $i=0;$i < $shard_count;$i++){
+     my $num = ${shard_count} -1;
      $indexes{$i} =  Lucy::Index::Indexer->new(
-        index  => "/tmp/indexes/shard_test${shard_count}__$i",
+        index  => "/tmp/indexes/test_index${num}_LC_${i}_${num}",
         schema => $schema,
         create => 1,
     );
