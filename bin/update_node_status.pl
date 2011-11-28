@@ -9,7 +9,7 @@ my $mp = Data::MessagePack->new();
 
 ## This scripts job is to let the Node server 
 ## know what indexes the searcher can use and thier schema's.
-## if make include some version info or other meta data
+## it may include some version info or other meta data
 ## in the future but for now just the schema.
 
 

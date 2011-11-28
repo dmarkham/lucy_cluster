@@ -35,4 +35,4 @@ foreach my $shard_count (@shards){
   map{$_->commit() } values %indexes; 
 
 }
-print "Done\n";
+print "Done but you have not tested the indexes yet to verify they have the corrent data!\n";
