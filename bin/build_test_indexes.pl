@@ -6,52 +6,33 @@ use Lucy::Plan::Schema;
 use Lucy::Plan::FullTextType;
 use Lucy::Analysis::PolyAnalyzer;
 
-
 my $schema = Lucy::Plan::Schema->new;
-my $polyanalyzer = Lucy::Analysis::PolyAnalyzer->new(
-               language => 'en',
-           );
-my $type = Lucy::Plan::FullTextType->new(
-               analyzer => $polyanalyzer,
-           );
+my $polyanalyzer = Lucy::Analysis::PolyAnalyzer->new( language => 'en');
+my $type = Lucy::Plan::FullTextType->new( analyzer => $polyanalyzer);
 $schema->spec_field( name => 'title',   type => $type );
 $schema->spec_field( name => 'body', type => $type );
 
-my $indexer = Lucy::Index::Indexer->new(
-    index  => "/tmp/indexes/test",
-    schema => $schema,
-    create => 1
-);
-my %docs = (
-    'a' => 'foo',
-    'b' => 'bar',
-);
 
-while ( my ( $title, $body ) = each %docs ) {
-    $indexer->add_doc(
-        {   title => $title,
-            body  => $body,
-        }
+my @shards =  (1,2,3,4,5,6,7,8,9,10);
+
+
+
+foreach my $shard_count (@shards){
+  my %indexes;  
+  for (my $i=0;$i < $shard_count;$i++){
+     $indexes{$i} =  Lucy::Index::Indexer->new(
+        index  => "/tmp/indexes/shard_test${shard_count}__$i",
+        schema => $schema,
+        create => 1,
     );
+  }
+ 
+  for (my $i=0;$i < 100;$i++){
+      
+    $indexes{$i % $shard_count }->add_doc( {   title => "$i", body  => "body" });
+  }
+
+  map{$_->commit() } values %indexes; 
+
 }
-$indexer->commit;
-
-my $searcher = Lucy::Search::IndexSearcher->new( index => "/tmp/indexes/test" );
-
-my $tokenizer = Lucy::Analysis::RegexTokenizer->new;
-my $or_parser = Lucy::Search::QueryParser->new(
-    schema   => $schema,
-    analyzer => $tokenizer,
-    fields   => [ 'title', 'body', ],
-);
-my $and_parser = Lucy::Search::QueryParser->new(
-    schema         => $schema,
-    analyzer       => $tokenizer,
-    fields         => [ 'title', 'body', ],
-    default_boolop => 'AND',
-);
-
-my $hits = $searcher->hits( query => "a" );
-print $hits->total_hits  ."\n" ;
-
-
+print "Done\n";

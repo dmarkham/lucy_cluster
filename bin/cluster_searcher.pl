@@ -96,6 +96,7 @@ sub dispatch{
     top_docs      => 1,
     fetch_doc     => 1,
     fetch_doc_vec => 1,
+    get_schema    => 1,
   );
 
   my $data;
@@ -137,6 +138,9 @@ sub dispatch{
     eval{
       my $args = thaw($data->{lucy_args});
       $response = $searcher->$method(%$args);
+      if($method eq 'get_schema'){
+        $response = $response->dump(); 
+      }
       $frozen     = nfreeze($response);
     };
     return {status => "error search or nfreeeze failed ($@)"} unless $frozen;
