@@ -1,4 +1,4 @@
-This is a unsupported prototype of a clustered system built with Lucy
+This is a prototype of a clustered system built with Lucy
 
 
 The system should work by distributing a Lucy index on many nodes. 
@@ -7,7 +7,7 @@ The main differences in the interface a user will see is.
 1. The enforcement of a primary_key in the schema.
 2. You can't use delete_by_query so deletes need to be 
    done with the primary_key
-3. Must know how to reach 1+ cluster_server.
+3. Must know how to reach 1+ cluster_server endpoints.
 
 
 
@@ -20,6 +20,14 @@ So lets say N=30, Y=3. We would place 10 shards on each of the 3 boxes. Then per
 multi-searches on the 10 indexes (async) sending the results for all 10 shards back as a single result 
 for each of the 3 nodes (async). I'm looking to see how fast I can do the 10 local searches and sync 
 them with the other 2 nodes.. 
+
+Cluster configuration is handled from the bottom up. What I mean by this is the Lucy indexes on disk
+can appear from any number of techniques. Starting up a cluster_searcher and pointing him to a 
+cluster aggregator should be all that is needed to expose a index to a user. Aggregator processes
+may be stacked. An aggregator ONLY talks to people  below him and people above him. NEVER his peers.
+Users May only connect up and query a aggregator that has no-one above him.
+
+
 
 Index:
 
