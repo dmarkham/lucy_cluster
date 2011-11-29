@@ -52,7 +52,7 @@ while(1){
 
   print "Checking Heartbeat on $my_node_hostport\n" if $debug;
   
-  ## every 5 seconds or so this guys will try to 
+  ## every N seconds or so this guys will try to 
   ## reconnect with the node and get back in sync
   if(time - $global_state{last_seen_node} > 10){
     print "Sent Hello to node\n" if $debug;
