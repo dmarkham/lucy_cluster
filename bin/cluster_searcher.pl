@@ -54,7 +54,7 @@ while (1) {
     $requester = zmq_socket($context, ZMQ_REQ);
     my $rv = zmq_setsockopt($requester, ZMQ_LINGER, 0);
     zmq_connect($requester, 'tcp://' . $my_node_hostport);
-    send_data($requester, {_action => 'hello'});
+    print send_data($requester, {_action => 'hello'});
   }
 
   ## poll the nodes requests

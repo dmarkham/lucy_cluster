@@ -17,7 +17,6 @@ use strict;
 use warnings;
 
 package ClusterNode;
-BEGIN { our @ISA = qw( Lucy::Search::Searcher ) }
 use Carp;
 use Storable qw( nfreeze thaw );
 use Data::MessagePack;
@@ -27,7 +26,7 @@ use Data::Dumper;
 
 
 my $mp = Data::MessagePack->new();
-my $context = zmq_init(1);
+my $context = zmq_init();
 
 
 
