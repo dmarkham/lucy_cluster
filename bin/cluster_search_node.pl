@@ -44,7 +44,7 @@ $socks_to_watch{downstream} = {
       my $data = zmq_msg_data($msg);
       print "down RECEV:$data\n";
       #my $resp = dispatch($data);
-      #send_data($down_stream, $resp);
+      send_data($down_stream, {'yo' => 1});
     }
   },};
 
