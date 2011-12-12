@@ -1,16 +1,31 @@
 use strict;
 use warnings;
-use ClusterClient;
-
+use Cluster::Client;
+use Data::Dumper;
 ## A searching user must know how to get to a cluster_server
 ## at least one. I'm still on the fence about a writing user..
-## we'll see..
 
-my $cc = ClusterClient->new(server => '127.0.0.1:9006');
+
+## A given cc object's endpoint should be eqauls
+## we only use one at a time.
+my $cc = Cluster::Client->new(endpoints => ['127.0.0.1:9905','127.0.0.1:9007' ]);
+
+#print Dumper($cc);
+
+my $searcher = $cc->get_searcher('test');
+
+print Dumper($searcher);
+exit;
+
+
+#$cc->wait;
+
+
+
+__END__
 
 ## I want the client to be able to ask questions about the indexes it has access to
 
-my $searcher = $cc->get_searcher('test');
 
 ## get all indexes...
 ## shards/nodes are hidden here behind a single searcher.
