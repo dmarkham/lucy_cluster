@@ -42,25 +42,37 @@ tcp_server $host, $port, sub {
         warn "Error:$msg";
         close_client($hdl);  
       },
-      on_read => sub{
-        my ($hdl) = @_;
-        print "BUFF:$hdl->{rbuf}\n"; 
-        if(!$globals{clients}{$hdl}{read_size} && bytes::length($hdl->{rbuf}) >= 4){
-          my $message_size = substr $hdl->{rbuf},0,4,'';
-          my $message_length = unpack( 'N', $message_size );
-          if($message_length < 5_000_000){ 
-            $globals{clients}{$hdl}{read_size} = $message_length;
-          }
-          else{
-            print "Message to big closing ($message_length)\n";
-            close_client($hdl);  
-            return;
-          }
-        }
-        if($globals{clients}{$hdl}{read_size} && bytes::length($hdl->{rbuf}) >= $globals{clients}{$hdl}{read_size}){
-          _dispatch_message($hdl);
-        }
-      },
+      on_read => sub {
+        # some data is here, now queue the length-header-read (4 octets)
+        shift->unshift_read (chunk => 4, sub {
+           # header arrived, decode
+           my $len = unpack "N", $_[1];
+           # now read the payload
+           shift->unshift_read (chunk => $len, sub {
+           _dispatch_message(@_);
+          }); 
+       }); 
+     },
+    
+     # on_read => sub{
+     #   my ($hdl) = @_;
+     #   print "BUFF:$hdl->{rbuf}\n"; 
+     #   if(!$globals{clients}{$hdl}{read_size} && bytes::length($hdl->{rbuf}) >= 4){
+     #     my $message_size = substr $hdl->{rbuf},0,4,'';
+     #     my $message_length = unpack( 'N', $message_size );
+     #     if($message_length < 5_000_000){ 
+     #       $globals{clients}{$hdl}{read_size} = $message_length;
+     #     }
+     #     else{
+     #       print "Message to big closing ($message_length)\n";
+     #       close_client($hdl);  
+     #       return;
+     #     }
+     #   }
+     #   if($globals{clients}{$hdl}{read_size} && bytes::length($hdl->{rbuf}) >= $globals{clients}{$hdl}{read_size}){
+     #     _dispatch_message($hdl);
+     #   }
+     # },
       timout =>0,;
    $globals{cur_clients}++;
    $globals{clients}{$handle}{handle} = $handle;
@@ -69,8 +81,8 @@ tcp_server $host, $port, sub {
 AnyEvent->condvar->recv;
 
 sub _dispatch_message{
-  my $hdl = shift @_;
-  my $data = delete $hdl->{rbuf};
+  my $hdl = shift ;
+  my $data = shift;
   my $message;
   eval{ $message = thaw $data;};
   if(!$message){
@@ -106,15 +118,5 @@ sub _send {
   }
   return 1;
 }
-
-
-
-
-
-
-
-
-
-
 
 

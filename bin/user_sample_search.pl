@@ -12,9 +12,11 @@ my $cc = Cluster::Client->new(endpoints => ['127.0.0.1:9905','127.0.0.1:9007' ])
 
 #print Dumper($cc);
 
+while(1){
 my $searcher = $cc->get_searcher('test');
 
-print Dumper($searcher);
+#print Dumper($searcher);
+}
 exit;
 
 
