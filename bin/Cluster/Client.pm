@@ -68,20 +68,21 @@ sub connect{
 
 sub get_searcher {
   my $self = shift;
+  my $index = shift;
   my $handle = $self->pick_endpoint(); 
   return unless $handle;
-
   my $cv   = AnyEvent->condvar;
   $handle->{cv} = $cv;
   #print Dumper($handle); 
-  $handle->timeout(10);
-  $self->ask(clients => [$handle], '_action' => 'get_schema',  ); 
+  $handle->timeout(20);
+  $self->ask(clients => [$handle], '_action' => 'get_schema', index => $index ); 
   #print "Sent\n";
   #print Dumper($handle);
   $cv->recv;
   $handle->timeout(0);
   my $result = delete $globals{$self}{clients}{$handle}{response};
-  return $result;
+  
+  return $result->{response};
 }
 
 sub pick_endpoint {

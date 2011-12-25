@@ -5,6 +5,7 @@ use AnyEvent::Socket qw/tcp_server parse_hostport/;
 use AnyEvent::Handle;
 use AnyEvent::Strict;
 use Data::Dumper;
+use JSON::XS;
 use Storable qw( nfreeze thaw );
 use bytes;
 no bytes;
@@ -13,6 +14,7 @@ use Getopt::Long;
 
 my $debug                  = 0;
 my $node_id = join("_",$$,int(rand(1_000_000))); 
+my $coder = JSON::XS->new->utf8();
 
 my $client_hostport = '127.0.0.1:9905';
 &GetOptions('debug'             => \$debug,
@@ -49,36 +51,43 @@ tcp_server $host, $port, sub {
            my $len = unpack "N", $_[1];
            # now read the payload
            shift->unshift_read (chunk => $len, sub {
-           _dispatch_message(@_);
+             _dispatch_message(@_);
           }); 
        }); 
      },
-    
-     # on_read => sub{
-     #   my ($hdl) = @_;
-     #   print "BUFF:$hdl->{rbuf}\n"; 
-     #   if(!$globals{clients}{$hdl}{read_size} && bytes::length($hdl->{rbuf}) >= 4){
-     #     my $message_size = substr $hdl->{rbuf},0,4,'';
-     #     my $message_length = unpack( 'N', $message_size );
-     #     if($message_length < 5_000_000){ 
-     #       $globals{clients}{$hdl}{read_size} = $message_length;
-     #     }
-     #     else{
-     #       print "Message to big closing ($message_length)\n";
-     #       close_client($hdl);  
-     #       return;
-     #     }
-     #   }
-     #   if($globals{clients}{$hdl}{read_size} && bytes::length($hdl->{rbuf}) >= $globals{clients}{$hdl}{read_size}){
-     #     _dispatch_message($hdl);
-     #   }
-     # },
-      timout =>0,;
+     timout =>0,;
+   
+
+
    $globals{cur_clients}++;
    $globals{clients}{$handle}{handle} = $handle;
 };
 
+
+my $w = AE::timer 20, 20, sub { 
+  my @list = keys  %{$globals{workers}};
+  @list = map { $globals{clients}{$_}{handle} } @list;
+  _send(clients =>\@list, response =>  { _action => 'index_status' } );
+};
+
+
 AnyEvent->condvar->recv;
+
+sub update_workers_indexes{
+  my %index_to_shards;
+  my %index_to_schemas;
+  foreach my $hdl (keys %{$globals{workers}}){
+    foreach my $index (keys %{$globals{workers}{$hdl}{indexes}}){
+      foreach my $data (@{$globals{workers}{$hdl}{indexes}{$index}}){
+        push @{$index_to_shards{$index}{$data->{shard}}} , $hdl; 
+        $index_to_schemas{$index} = $data->{schema};
+      }
+    }
+  }
+  print Dumper(\%index_to_shards);
+  $globals{indexes} = \%index_to_shards;
+  $globals{schemas} = \%index_to_schemas;
+}
 
 sub _dispatch_message{
   my $hdl = shift ;
@@ -86,19 +95,52 @@ sub _dispatch_message{
   my $message;
   eval{ $message = thaw $data;};
   if(!$message){
-    print "Something is wrong with the message!\n";
+    print "something is wrong with the message!\n";
     return;
   }
-  _send(clients =>[$hdl], result => "Thank You");
-  print Dumper($message);  
+  
+  
+  if($message->{index_status}){
+    my $d = $coder->decode($message->{index_status});
+    #print Dumper($d);
+    $globals{workers}{$hdl}{indexes} = $d;
+    update_workers_indexes();    
+    return;
+  }
+
+  #print Dumper($message);  
+  my $action = delete $message->{_action};
+  if(!$action){
+    print "Missing a action!\n";
+    close_client($hdl);  
+    return;
+  }
+  
+  
+  if($action eq 'searcher_hello'){
+    ## worker with indexes lets get a list
+    _send(clients =>[$hdl], response =>  { _action => 'index_status' } );
+  }
+  elsif($action eq 'get_schema'){
+    print Dumper($globals{schemas}{$message->{index}});
+    _send(clients =>[$hdl], response => $globals{schemas}{$message->{index}} );
+  }
+  else{
+    print "no known action:$action\n";
+    close_client($hdl);  
+  }
 }
 
 sub close_client{
   my $hdl = shift @_;
   print "Closing Client\n";
-  print Dumper($hdl);
+  #print Dumper($hdl);
   $globals{cur_clients}--;
   delete $globals{clients}{$hdl};
+  if(defined $globals{workers}{$hdl}){
+    delete $globals{workers}{$hdl};
+    update_workers_indexes();    
+  }
   $hdl->destroy;
 }
 

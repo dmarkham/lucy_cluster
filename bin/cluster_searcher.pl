@@ -1,30 +1,19 @@
 use strict;
 use warnings;
-
 use Lucy;
 use Getopt::Long;
-use ZeroMQ::Raw;
-use ZeroMQ::Constants qw/:all/;
-
-use Storable qw( nfreeze thaw );
-use Data::MessagePack;
-use File::Slurp;
 use Data::Dumper;
+use File::Slurp;
+use AnyEvent::Socket qw/parse_hostport/;
+use AnyEvent::Handle;
+use Storable qw( nfreeze thaw );
 
-##  This Script is a Dumb generic Searcher it can search any index
-##  in the index_dir you tell this script who to connect up to
-##  and it's a blocking question/response  handshake
 
-## flow should look like this
-## ping  node (it's boss) with a heartbeat
-## node askes searcher about what he has
-## node starts sending querys to this searcher (that he can help on)
 
 ## This is who I will be getting my work from
 my $my_node_hostport = "127.0.0.1:9905";
-my $mp               = Data::MessagePack->new();
 
-## place where 1 or more Lucy indexes live
+## default place where 1 or more Lucy indexes live
 my $index_dir = "/tmp/indexes/";
 
 my $debug = 0;
@@ -32,57 +21,27 @@ my $debug = 0;
             'node_hostport' => \$my_node_hostport,
             'index_dir'     => \$index_dir,);
 
-## our connection to the Node
-my $context = zmq_init();
-my $requester;
 
 my %global_state;
 $global_state{last_seen_node} = 0;
 
-my $rand_id = int(rand(1_000_000));
 
-while (1) {
+my $handle = get_connect(host_port => $my_node_hostport);
 
-  print "Checking Heartbeat on $my_node_hostport\n" if $debug;
+## connect back up
+my $w = AE::timer 5, 5, sub { 
+    if($handle->destroyed){
+      $handle = get_connect(host_port => $my_node_hostport);
+    } };
 
-  ## every N seconds or so this guys will try to
-  ## reconnect with the node and get back in sync
-  if (time - $global_state{last_seen_node} > 10) {
-    print "Sent Hello to node\n" if $debug;
-    $global_state{last_seen_node} = time;
-    zmq_close($requester) if $requester;
-    $requester = zmq_socket($context, ZMQ_REQ);
-    my $rv = zmq_setsockopt($requester, ZMQ_LINGER, 0);
-    zmq_connect($requester, 'tcp://' . $my_node_hostport);
-    print send_data($requester, {_action => 'hello'});
-  }
 
-  ## poll the nodes requests
-  zmq_poll(
-    [
-     {socket   => $requester,
-      events   => ZMQ_POLLIN,
-      callback => sub {
-        while (my $msg = zmq_recv($requester, ZMQ_RCVMORE)) {
-          $global_state{last_seen_node} = time;
-          my $data = zmq_msg_data($msg);
-          my $resp = dispatch($data);
-          send_data($requester, $resp);
-        }
-      },
-     }
-    ],
-    500_000);
-}
+AnyEvent->condvar->recv;
 
-zmq_close($requester);
-
-exit;
 
 ## do the work after getting a message
 sub dispatch {
-  my $arg = shift;
-
+  my $args = shift;
+  my $data = $args->{response};
   my %allowed_lucy_methods = (doc_max       => 1,
                               doc_freq      => 1,
                               top_docs      => 1,
@@ -90,12 +49,11 @@ sub dispatch {
                               fetch_doc_vec => 1,
                               get_schema    => 1,);
 
-  my $data;
-  eval {$data = $mp->unpack($arg);};
-  return {status => "error missing data unpack fail? ($@)"} unless $data;
+  return {status => "error missing data unpack fail?"} unless $data;
   print "Recived: " . Dumper($data) if $debug;
   my $method = delete $data->{_action};
-
+  return {status => "error missing method"} unless $method;
+  
   if ($method eq 'index_status') {
     ## read a json file from disk some other system keeping
     ## up to date and send it. This file will let the Node server
@@ -103,7 +61,7 @@ sub dispatch {
     my $utf_text = "";
     eval {$utf_text = read_file("$index_dir/index_list.json", binmode => ':utf8')};
     return {status => "error issue with index_list,json ($@)"} unless $utf_text;
-    return {index_status => $utf_text};
+    return { index_status => $utf_text};
   }
 
   my $index = delete $data->{_index};
@@ -139,12 +97,69 @@ sub dispatch {
 
 }
 
-sub send_data {
-  my ($socket, $data) = @_;
-  $data->{_worker_id} = $$ . "_$rand_id";
-  return eval {
-    my $msg = zmq_msg_init_data($mp->pack($data));
-    return zmq_send($requester, $msg);
-  };
+
+sub get_connect{
+  my %args = @_;
+  my $host_port = $args{host_port};
+  return unless $host_port;
+
+  my ($host, $port) = parse_hostport($host_port);
+  
+  my $handle = new AnyEvent::Handle
+      connect   => [$host, $port],
+      keepalive => 1,
+      timeout   => 0,
+      on_error  => sub {
+        my ($hdl, $fatal, $msg) = @_;
+        $msg = "" unless $msg; 
+        warn "Error:($host_port) $msg";
+      },
+      on_connect_error => sub {
+        my ($hdl, $fatal, $msg) = @_;
+        $msg = "" unless $msg; 
+        warn "Connect Error:($host_port) $msg";
+      },
+      on_timeout => sub {
+        my ($hdl, $fatal, $msg) = @_;
+        $msg = "" unless $msg; 
+        warn "Connect Timeout Error:($host_port) $msg";
+      },
+      on_connect => sub {
+        my $hdl = shift;
+        
+        my $serialized = nfreeze( {_action => 'searcher_hello'} );
+        my $len = pack( 'N', bytes::length($serialized) );
+        $hdl->push_write($len . $serialized);
+      },
+      on_read => sub {
+        # some data is here, now queue the length-header-read (4 octets)
+        shift->unshift_read (chunk => 4, sub {
+           
+           my $len = unpack "N", $_[1];
+           $_[0]->unshift_read (chunk => $len, sub {
+             my $data;
+             eval{
+                $data = thaw $_[1];
+             }; 
+             if($data){
+               my $return = dispatch($data);
+               my $serialized = nfreeze( $return  );
+               my $len = pack( 'N', bytes::length($serialized) );
+               $_[0]->push_write($len . $serialized);
+             }
+          });
+       });
+     }, 
+     on_prepare => sub {
+        5;
+      };
+
+  return $handle;
 }
+
+
+
+
+
+
 

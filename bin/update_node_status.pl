@@ -3,8 +3,9 @@ use warnings;
 use Lucy;
 use Getopt::Long;
 use File::Slurp;
-use Data::MessagePack;
-my $mp = Data::MessagePack->new();
+use JSON::XS;
+
+my $coder = JSON::XS->new->utf8();
 
 
 ## This scripts job is to let the Node server 
@@ -34,10 +35,20 @@ foreach my $dir (@dirs){
     my $searcher = Lucy::Search::IndexSearcher->new( index => "$index_dir/$dir/" );
     my $s = $searcher->get_schema();
     my $dump = $s->dump();
-    print "Adding:$dir\n" if $debug;
-    $indexes{$dir} =  { schema => $dump}; 
+    my $base_index = $dir;
+    my $shard = 0;
+    my $total_shards = 0;
+    if($dir =~ m/^(.*)_LC_\d+_\d+$/){
+      ($base_index,$shard,$total_shards) = ($dir =~ m/^(.*)_LC_(\d+)_(\d+)$/);
+    
+    }
+    print "Adding:$dir\t($base_index) ($shard) ($total_shards)\n" if $debug;
+    push @{$indexes{$base_index}} , { shard => $shard, 
+                                      total_shards => $total_shards,
+                                      index => $dir, 
+                                      schema => $dump}; 
   };
   print  "Issue with $dir: $@\n" if $@;
 }
 
-write_file( $list_file, {binmode => ':utf8'}, $mp->encode(\%indexes) ) ;
+write_file( $list_file, {binmode => ':utf8'}, $coder->encode(\%indexes) ) ;
