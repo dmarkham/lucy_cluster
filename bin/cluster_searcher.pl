@@ -11,14 +11,14 @@ use Storable qw( nfreeze thaw );
 
 
 ## This is who I will be getting my work from
-my $my_node_hostport = "127.0.0.1:9905";
+my $my_node_hostport = '127.0.0.1:9905';
 
 ## default place where 1 or more Lucy indexes live
 my $index_dir = "/tmp/indexes/";
 
 my $debug = 0;
 &GetOptions('debug'         => \$debug,
-            'node_hostport' => \$my_node_hostport,
+            'node_hostport:s' => \$my_node_hostport,
             'index_dir'     => \$index_dir,);
 
 
@@ -104,7 +104,7 @@ sub get_connect{
   return unless $host_port;
 
   my ($host, $port) = parse_hostport($host_port);
-  
+  print "$host\t$port\n"; 
   my $handle = new AnyEvent::Handle
       connect   => [$host, $port],
       keepalive => 1,
