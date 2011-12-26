@@ -16,9 +16,9 @@ my $debug                  = 0;
 my $node_id = join("_",$$,int(rand(1_000_000))); 
 my $coder = JSON::XS->new->utf8();
 
-my $client_hostport = '127.0.0.1:9905';
+my $client_hostport = '0:9905';
 &GetOptions('debug'             => \$debug,
-            'client_hostport'     => \$client_hostport);
+            'client_hostport:s'     => \$client_hostport);
 
 
 
@@ -28,6 +28,7 @@ my %globals = (max_clients => 2000,
 
 
 my ($host,$port) = parse_hostport($client_hostport);
+print "vars: $host\t$port\n";
 tcp_server $host, $port, sub {
   my ($fh, $host, $port) = @_;
   
