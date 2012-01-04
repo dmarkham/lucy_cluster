@@ -52,13 +52,13 @@ sub connect{
         close_client($hdl,$self);
       },
       on_timeout => sub {
-      my ($hdl, $fatal, $msg) = @_;
-      $msg = "" unless $msg; 
-      warn "Connect Timeout Error:($host_port) $msg";
-      close_client($hdl,$self);
+        my ($hdl, $fatal, $msg) = @_;
+        $msg = "" unless $msg; 
+        warn "Connect Timeout Error:($host_port) $msg";
+        close_client($hdl,$self);
       },
       on_prepare => sub {
-      5;
+        5;
       };
     $globals{$self}{clients}{$handle}{handle} = $handle;
   }
@@ -75,14 +75,25 @@ sub get_searcher {
   $handle->{cv} = $cv;
   #print Dumper($handle); 
   $handle->timeout(20);
-  $self->ask(clients => [$handle], '_action' => 'get_schema', index => $index ); 
+  $self->ask(clients => [$handle], '_action' => 'get_schema', _index => $index ); 
   #print "Sent\n";
+  
   #print Dumper($handle);
   $cv->recv;
   $handle->timeout(0);
-  my $result = delete $globals{$self}{clients}{$handle}{response};
+  my $result = $self->get_result($handle);
+  my $schema = Lucy::Plan::Schema->new;
+  $schema = $schema->load($result->{response});
+  my $searcher = Cluster::Client::Searcher->new(cluster_client => $self, schema => $schema, index => $index);
   
-  return $result->{response};
+  return $searcher;
+}
+
+sub get_result{
+  my $self = shift;
+  my $handle = shift;
+  my $result = delete $globals{$self}{clients}{$handle}{response};
+  return $result;
 }
 
 sub pick_endpoint {
@@ -154,6 +165,84 @@ sub DESTROY {
   my $self = shift;
   delete $globals{$self};
 }
+
+1;
+
+
+package Cluster::Client::Searcher;
+
+BEGIN { our @ISA = qw( Lucy::Search::Searcher ) }
+use Lucy;
+use Carp;
+use AnyEvent;
+use strict;
+
+
+my %global;
+sub new {
+    my ( $either, %args ) = @_;
+    my $cc = delete $args{cluster_client};
+    my $index = delete $args{index};
+    my $self         = $either->SUPER::new(%args);
+    $global{$$self}{cc}     = $cc;
+    $global{$$self}{index}     = $index;
+    
+    confess("No cluster client: $!") unless $cc;
+    return $self;
+}
+
+sub _rpc{
+  my $self = shift;
+  my $args = shift;
+  my $cc = $global{$$self}{cc};
+  my $index = $global{$$self}{index};
+  my $handle = $cc->pick_endpoint(); 
+  return unless $handle;
+  my $cv   = AnyEvent->condvar;
+  $handle->{cv} = $cv;
+  $handle->timeout(20);
+  $cc->ask(%{$args}, clients => [$handle],  _index => $index ); 
+  #print "Sent\n";
+  
+  #print Dumper($handle);
+  $cv->recv;
+  $handle->timeout(0);
+  my $result = $cc->get_result($handle);
+  return $result;
+}
+
+sub top_docs {
+    my $self = shift;
+    my %args = ( @_, _action => 'top_docs' );
+    return $self->_rpc( \%args );
+}
+
+sub fetch_doc {
+    my ( $self, $doc_id ) = @_;
+    my %args = ( doc_id => $doc_id, _action => 'fetch_doc' );
+    return $self->_rpc( \%args );
+}
+
+sub fetch_doc_vec {
+    my ( $self, $doc_id ) = @_;
+    my %args = ( doc_id => $doc_id, _action => 'fetch_doc_vec' );
+    return $self->_rpc( \%args );
+}
+
+sub doc_max {
+    my $self = shift;
+    my %args = ( _action => 'doc_max' );
+    return $self->_rpc( { _action => 'doc_max' } );
+}
+
+sub doc_freq {
+    my $self = shift;
+    my %args = ( @_, _action => 'doc_freq' );
+    return $self->_rpc( \%args );
+}
+
+
+
 
 1;
 

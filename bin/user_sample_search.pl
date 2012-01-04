@@ -8,19 +8,33 @@ use Data::Dumper;
 
 ## A given cc object's endpoint should be eqauls
 ## we only use one at a time.
-my $cc = Cluster::Client->new(endpoints => ['127.0.0.1:9905','127.0.0.1:9007' ]);
+#my $cc = Cluster::Client->new(endpoints => ['127.0.0.1:9905','127.0.0.1:9007' ]);
+my $cc = Cluster::Client->new(endpoints => ['127.0.0.1:9905' ]);
 
-#print Dumper($cc);
-
-#while(1){
 my $searcher = $cc->get_searcher('test_index1');
-
 print Dumper($searcher);
+
+
+my $r = $searcher->doc_freq( field => 'title', term => '1' );
+print Dumper($r);
+
+
+exit;
+my $r = $searcher->doc_max();
+
+my $r = $searcher->fetch_doc(1);
+
+my $r = $searcher->fetch_doc_vec(1);
+
+my $hits = $searcher->hits( query => 'x' );
+
+while ( my $hit = $hits->next ) {
+    print "Hit: $hit->{body}\n";
+}
+
 #}
 exit;
 
-
-#$cc->wait;
 
 
 

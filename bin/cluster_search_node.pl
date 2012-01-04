@@ -39,13 +39,13 @@ tcp_server $host, $port, sub {
    } 
    print join("\t","Starting Connection from $host:$port",$globals{cur_clients}+1,"\n");
    my $handle = new AnyEvent::Handle
-      fh => $fh, 
-      on_error => sub {
+     fh => $fh, 
+     on_error => sub {
         my ($hdl, $fatal, $msg) = @_;
         warn "Error:$msg";
         close_client($hdl);  
       },
-      on_read => sub {
+     on_read => sub {
         # some data is here, now queue the length-header-read (4 octets)
         shift->unshift_read (chunk => 4, sub {
            # header arrived, decode
@@ -77,17 +77,24 @@ AnyEvent->condvar->recv;
 sub update_workers_indexes{
   my %index_to_shards;
   my %index_to_schemas;
+  
   foreach my $hdl (keys %{$globals{workers}}){
     foreach my $index (keys %{$globals{workers}{$hdl}{indexes}}){
       foreach my $data (@{$globals{workers}{$hdl}{indexes}{$index}}){
-        push @{$index_to_shards{$index}{$data->{shard}}} , $hdl; 
+        $index_to_shards{$index}{total_shards} = $data->{total_shards} +1; 
+        if (!exists $index_to_shards{$index}{shards}{$data->{shard}}){
+          $index_to_shards{$index}{my_shard_count}++;
+        }
+        push @{$index_to_shards{$index}{shards}{$data->{shard}}} , {name => $data->{index} , handle => $hdl}; 
         $index_to_schemas{$index} = $data->{schema};
       }
     }
   }
-  print Dumper(\%index_to_shards);
+  
+  
   $globals{indexes} = \%index_to_shards;
   $globals{schemas} = \%index_to_schemas;
+  #print Dumper(\%globals);
 }
 
 sub _dispatch_message{
@@ -110,9 +117,10 @@ sub _dispatch_message{
   }
 
   #print Dumper($message);  
-  my $action = delete $message->{_action};
+  my $action =  $message->{_action};
   if(!$action){
     print "Missing a action!\n";
+    print Dumper($message);  
     close_client($hdl);  
     return;
   }
@@ -123,12 +131,31 @@ sub _dispatch_message{
     _send(clients =>[$hdl], response =>  { _action => 'index_status' } );
   }
   elsif($action eq 'get_schema'){
-    print Dumper($globals{schemas}{$message->{index}});
-    _send(clients =>[$hdl], response => $globals{schemas}{$message->{index}} );
+    ## print Dumper($globals{schemas}{$message->{_index}});
+    _send(clients =>[$hdl], response => $globals{schemas}{$message->{_index}} );
   }
   else{
-    print "no known action:$action\n";
-    close_client($hdl);  
+    my $known_shards =  $globals{indexes}{$message->{_index}};
+    if(!$known_shards){
+      _send(clients =>[$hdl], status =>"Error: index not know\n");
+    }
+   
+    ## so this is not going to work...
+    ## the users request needs to maintain state
+    ## e 
+    print Dumper($globals{indexes}{$message->{_index}});
+    print "Sending Message:"  . Dumper($message);
+    my @handles_to_ask;
+    foreach my $shard (keys %{$known_shards->{shards}}){
+      my $server_count = scalar @{$known_shards->{shards}{$shard}};
+      my $index = int(rand($server_count));
+      my $worker = $globals{clients}{$known_shards->{shards}{$shard}[$index]{handle}}{handle};
+      my $index_name = $known_shards->{shards}{$shard}[$index]{name};
+      push @handles_to_ask,{$shard  => $worker};
+      $message->{_index} = $index_name; 
+      _send(clients =>[$worker], response => $message );
+    }
+    
   }
 }
 

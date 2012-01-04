@@ -82,17 +82,15 @@ sub dispatch {
 
   if ($allowed_lucy_methods{$method}) {
     my $response;
-    my $frozen;
     eval {
-      my $args = thaw($data->{lucy_args});
-      $response = $searcher->$method(%$args);
+      print "index:$index\targs:" . Dumper($data);
+      $response = $searcher->$method(%$data);
       if ($method eq 'get_schema') {
         $response = $response->dump();
       }
-      $frozen = nfreeze($response);
     };
-    return {status => "error search or nfreeeze failed ($@)"} unless $frozen;
-    return {response => $frozen};
+    return {status => "error search or nfreeeze failed ($@)"} if $@;
+    return {response => $response};
   }
 
 }
