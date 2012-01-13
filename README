@@ -7,7 +7,7 @@ The main difference in the interface a user will see is.
 Cluster configuration is handled from the bottom up. What I mean by this is the Lucy indexes on disk
 can appear from any number of techniques. Starting up a cluster_searcher and pointing him to a 
 cluster aggregator should be all that is needed to expose a index to a user. Aggregator processes
-may be stacked. An aggregator ONLY talks to people  below him and people above him. 
+may be stacked. 
 
 
 
