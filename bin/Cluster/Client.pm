@@ -191,6 +191,7 @@ sub new {
     return $self;
 }
 
+
 sub _rpc{
   my $self = shift;
   my $args = shift;
@@ -208,7 +209,7 @@ sub _rpc{
   $cv->recv;
   $handle->timeout(0);
   my $result = $cc->get_result($handle);
-  return $result;
+  return $result->{response};
 }
 
 sub top_docs {

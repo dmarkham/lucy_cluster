@@ -54,6 +54,8 @@ sub dispatch {
   my $method = delete $data->{_action};
   return {status => "error missing method"} unless $method;
   
+  my $message_id = delete $data->{_message_id};
+
   if ($method eq 'index_status') {
     ## read a json file from disk some other system keeping
     ## up to date and send it. This file will let the Node server
@@ -61,10 +63,11 @@ sub dispatch {
     my $utf_text = "";
     eval {$utf_text = read_file("$index_dir/index_list.json", binmode => ':utf8')};
     return {status => "error issue with index_list,json ($@)"} unless $utf_text;
-    return { index_status => $utf_text};
+    return { index_status => $utf_text };
   }
 
   my $index = delete $data->{_index};
+  my $orig_index = $index;
   return {status => 'error missing _index'} unless $index;
 
   $index = "$index_dir/$index";
@@ -90,7 +93,7 @@ sub dispatch {
       }
     };
     return {status => "error search or nfreeeze failed ($@)"} if $@;
-    return {response => $response};
+    return {index_name => $orig_index, message_id =>$message_id ,response => $response};
   }
 
 }

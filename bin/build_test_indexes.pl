@@ -12,6 +12,7 @@ my $type = Lucy::Plan::FullTextType->new( analyzer => $polyanalyzer);
 $schema->spec_field( name => 'title',   type => $type );
 $schema->spec_field( name => 'body', type => $type );
 
+mkdir '/tmp/indexes/';
 
 my @shards =  (1,2,3,4,6,10,30);
 
